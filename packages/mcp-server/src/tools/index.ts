@@ -1,14 +1,15 @@
 // File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
 
-import TodoNinja from 'todo-ninja';
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Metadata, Endpoint, HandlerFunction } from './types';
+
+export { Metadata, Endpoint, HandlerFunction };
 
 import create_todos from './todos/create-todos';
 import retrieve_todos from './todos/retrieve-todos';
 import update_todos from './todos/update-todos';
 import list_todos from './todos/list-todos';
 import delete_todos from './todos/delete-todos';
-import complete_todos from './todos/complete-todos';
+import complete_todo_todos from './todos/complete-todo-todos';
 import add_todos_tags from './todos/tags/add-todos-tags';
 import remove_todos_tags from './todos/tags/remove-todos-tags';
 import create_users from './users/create-users';
@@ -17,20 +18,6 @@ import create_tags from './tags/create-tags';
 import retrieve_tags from './tags/retrieve-tags';
 import list_tags from './tags/list-tags';
 import delete_tags from './tags/delete-tags';
-
-export type HandlerFunction = (client: TodoNinja, args: Record<string, unknown> | undefined) => Promise<any>;
-
-export type Metadata = {
-  resource: string;
-  operation: 'read' | 'write';
-  tags: string[];
-};
-
-export type Endpoint = {
-  metadata: Metadata;
-  tool: Tool;
-  handler: HandlerFunction;
-};
 
 export const endpoints: Endpoint[] = [];
 
@@ -43,7 +30,7 @@ addEndpoint(retrieve_todos);
 addEndpoint(update_todos);
 addEndpoint(list_todos);
 addEndpoint(delete_todos);
-addEndpoint(complete_todos);
+addEndpoint(complete_todo_todos);
 addEndpoint(add_todos_tags);
 addEndpoint(remove_todos_tags);
 addEndpoint(create_users);
@@ -77,9 +64,10 @@ export function query(filters: Filter[], endpoints: Endpoint[]): Endpoint[] {
   });
 
   // Check if any filters didn't match
-  if (unmatchedFilters.size > 0) {
+  const unmatched = Array.from(unmatchedFilters).filter((f) => f.type === 'tool' || f.type === 'resource');
+  if (unmatched.length > 0) {
     throw new Error(
-      `The following filters did not match any endpoints: ${[...unmatchedFilters]
+      `The following filters did not match any endpoints: ${unmatched
         .map((f) => `${f.type}=${f.value}`)
         .join(', ')}`,
     );

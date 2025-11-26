@@ -1,4 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 import { Endpoint } from './tools';
 
 export interface ClientCapabilities {
@@ -19,6 +20,47 @@ export const defaultClientCapabilities: ClientCapabilities = {
   toolNameLength: undefined,
 };
 
+export const ClientType = z.enum(['openai-agents', 'claude', 'claude-code', 'cursor', 'infer']);
+export type ClientType = z.infer<typeof ClientType>;
+
+// Client presets for compatibility
+// Note that these could change over time as models get better, so this is
+// a best effort.
+export const knownClients: Record<Exclude<ClientType, 'infer'>, ClientCapabilities> = {
+  'openai-agents': {
+    topLevelUnions: false,
+    validJson: true,
+    refs: true,
+    unions: true,
+    formats: true,
+    toolNameLength: undefined,
+  },
+  claude: {
+    topLevelUnions: true,
+    validJson: false,
+    refs: true,
+    unions: true,
+    formats: true,
+    toolNameLength: undefined,
+  },
+  'claude-code': {
+    topLevelUnions: false,
+    validJson: true,
+    refs: true,
+    unions: true,
+    formats: true,
+    toolNameLength: undefined,
+  },
+  cursor: {
+    topLevelUnions: false,
+    validJson: true,
+    refs: false,
+    unions: false,
+    formats: false,
+    toolNameLength: 50,
+  },
+};
+
 /**
  * Attempts to parse strings into JSON objects
  */
@@ -30,8 +72,11 @@ export function parseEmbeddedJSON(args: Record<string, unknown>, schema: Record<
     if (typeof value === 'string') {
       try {
         const parsed = JSON.parse(value);
-        newArgs[key] = parsed;
-        updated = true;
+        // Only parse if result is a plain object (not array, null, or primitive)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          newArgs[key] = parsed;
+          updated = true;
+        }
       } catch (e) {
         // Not valid JSON, leave as is
       }
@@ -148,7 +193,11 @@ export function removeTopLevelUnions(tool: Tool): Tool[] {
   });
 }
 
-function findUsedDefs(schema: JSONSchema, defs: Record<string, JSONSchema>): Record<string, JSONSchema> {
+function findUsedDefs(
+  schema: JSONSchema,
+  defs: Record<string, JSONSchema>,
+  visited: Set<string> = new Set(),
+): Record<string, JSONSchema> {
   const usedDefs: Record<string, JSONSchema> = {};
 
   if (typeof schema !== 'object' || schema === null) {
@@ -160,9 +209,11 @@ function findUsedDefs(schema: JSONSchema, defs: Record<string, JSONSchema>): Rec
     if (refParts[0] === '#' && refParts[1] === '$defs' && refParts[2]) {
       const defName = refParts[2];
       const def = defs[defName];
-      if (def) {
+      if (def && !visited.has(schema.$ref)) {
         usedDefs[defName] = def;
-        Object.assign(usedDefs, findUsedDefs(def, defs));
+        visited.add(schema.$ref);
+        Object.assign(usedDefs, findUsedDefs(def, defs, visited));
+        visited.delete(schema.$ref);
       }
     }
     return usedDefs;
@@ -170,12 +221,15 @@ function findUsedDefs(schema: JSONSchema, defs: Record<string, JSONSchema>): Rec
 
   for (const key in schema) {
     if (key !== '$defs' && typeof schema[key] === 'object' && schema[key] !== null) {
-      Object.assign(usedDefs, findUsedDefs(schema[key] as JSONSchema, defs));
+      Object.assign(usedDefs, findUsedDefs(schema[key] as JSONSchema, defs, visited));
     }
   }
 
   return usedDefs;
 }
+
+// Export for testing
+export { findUsedDefs };
 
 /**
  * Inlines all $refs in a schema, eliminating $defs.
