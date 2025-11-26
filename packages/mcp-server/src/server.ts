@@ -34,7 +34,7 @@ export const newMcpServer = () =>
   new McpServer(
     {
       name: 'todo_ninja_api',
-      version: '0.1.0-alpha.1',
+      version: '0.1.0-alpha.2',
     },
     { capabilities: { tools: {}, logging: {} } },
   );
